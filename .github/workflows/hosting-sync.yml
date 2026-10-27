@@ -1,0 +1,45 @@
+name: Sync source to SpaceWeb
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: [Checks]
+    types: [completed]
+    branches: [master]
+permissions:
+  contents: read
+concurrency:
+  group: reis-hosting-source
+  cancel-in-progress: false
+jobs:
+  sync:
+    if: github.ref == 'refs/heads/master' && (github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'))
+    runs-on: ubuntu-latest
+    environment: hosting
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - name: Configure restricted SSH key
+        env:
+          HOSTING_SSH_PRIVATE_KEY: ${{ secrets.HOSTING_SSH_PRIVATE_KEY }}
+          HOSTING_SSH_KNOWN_HOSTS: ${{ secrets.HOSTING_SSH_KNOWN_HOSTS }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$HOSTING_SSH_PRIVATE_KEY" && test -n "$HOSTING_SSH_KNOWN_HOSTS"
+          umask 077
+          mkdir -p ~/.ssh
+          printf '%s\n' "$HOSTING_SSH_PRIVATE_KEY" > ~/.ssh/reis_hosting
+          printf '%s\n' "$HOSTING_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+      - name: Send source archive (no application launch)
+        env:
+          RELEASE_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_SHA" =~ ^[a-f0-9]{40}$ ]]
+          git archive --format=tar.gz "$RELEASE_SHA" | ssh -i ~/.ssh/reis_hosting -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 spugovxsim@77.222.40.251 "sync $RELEASE_SHA"
+      - name: Remove runner credentials
+        if: always()
+        shell: bash
+        run: rm -f ~/.ssh/reis_hosting ~/.ssh/known_hosts
