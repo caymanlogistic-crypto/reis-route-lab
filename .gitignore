@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.env
+*.db
+*.sqlite*
+*.tgz
+*.zip
+.sites/
+.openai/local*
+outputs/
