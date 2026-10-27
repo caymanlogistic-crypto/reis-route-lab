@@ -4,7 +4,8 @@ export async function yandexRoute(trip,env) {
   if(trip.points.length<2||trip.points.length>50)throw new RoutingError('Для автомобильного маршрута нужно от 2 до 50 опор.');
   const params=new URLSearchParams({apikey:env.YANDEX_ROUTER_KEY,waypoints:trip.points.map(p=>`${p.lat},${p.lon}`).join('|'),mode:'driving',traffic:'disabled'});
   const supportedParameters={};
-  let response;try{response=await fetch('https://api.routing.yandex.net/v2/route?'+params,{signal:AbortSignal.timeout(20000)});}catch{throw new RoutingError('Сервис маршрутизации недоступен или не ответил за 20 секунд.',503);}
+  const headers=env.YANDEX_REFERER?{Referer:env.YANDEX_REFERER}:{};
+  let response;try{response=await fetch('https://api.routing.yandex.net/v2/route?'+params,{headers,signal:AbortSignal.timeout(20000)});}catch{throw new RoutingError('Сервис маршрутизации недоступен или не ответил за 20 секунд.',503);}
   if(!response.ok){const status=response.status;throw new RoutingError(status===401||status===403?'Яндекс отклонил ключ или права на Router API (HTTP '+status+'). Проверьте подключение продукта API Получение деталей маршрута.':status===429?'Исчерпана квота Router API (HTTP 429).':'Ошибка Router API (HTTP '+status+').',status===429?429:422);}
   let data;try{data=await response.json();}catch{throw new RoutingError('Router API вернул некорректный JSON.');}
   const raw=data.route?.legs;if(!raw||raw.length!==trip.points.length-1)throw new RoutingError('Нет полного автомобильного маршрута для заданных опор.');

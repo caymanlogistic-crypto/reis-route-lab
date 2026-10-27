@@ -21,6 +21,12 @@ async function workspace(t){
 }
 async function errorText(r){if(r.ok)return '';try{return await r.clone().text();}catch{return 'Unreadable response';}}
 
+test('integration probe sends application Referer required by a domain-restricted Yandex key',async t=>{
+ const w=await workspace(t),original=globalThis.fetch;w.env.YANDEX_ROUTER_KEY='private-test-key';let referer;
+ globalThis.fetch=async(url,options)=>{referer=options.headers.Referer;return Response.json({route:{legs:[{status:'OK',steps:[{length:1000,duration:120,polyline:{points:[[55.744,37.612],[55.751,37.622]]}}]}]}});};
+ try{const result=await w.send('POST','/api/integration/check',{});assert.equal(result.routing.ok,true);assert.equal(referer,'http://localhost:4317/');assert.equal(JSON.stringify(result).includes('private-test-key'),false);}finally{globalThis.fetch=original;}
+});
+
 test('registry filters before pagination and export preferences preserve unrelated settings',async t=>{
  const w=await workspace(t);await w.send('PUT','/api/settings',{licenseConfirmed:true,backupIntervalHours:12,backupRetention:4});await w.send('PUT','/api/settings',{exportProfile:{name:'Клиентский',timezone:'UTC'}});const settings=await w.get('/api/settings');assert.equal(settings.licenseConfirmed,true);assert.equal(settings.backupIntervalHours,12);assert.equal(settings.backupRetention,4);assert.equal(settings.exportProfile.timezone,'UTC');
  await w.send('PUT','/api/settings',{backupIntervalHours:0});
