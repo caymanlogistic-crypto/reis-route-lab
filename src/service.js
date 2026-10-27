@@ -9,7 +9,7 @@ const uid=()=>crypto.randomUUID();
 const json=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff'}});
 const fail=(message,status=422)=>{throw Object.assign(new Error(message),{status});};
 const clone=x=>structuredClone(x);
-const signature=t=>JSON.stringify({points:t.points.map(p=>[p.lat,p.lon]),profile:t.profile});
+const signature=t=>JSON.stringify({mode:'driving',points:t.points.map(p=>[p.lat,p.lon]),profile:t.profile});
 async function body(request){if(Number(request.headers.get('content-length'))>12*1024*1024)fail('Размер запроса превышает 12 МБ.',413);const t=await request.text();if(t.length>12*1024*1024)fail('Размер запроса превышает 12 МБ.',413);try{return t?JSON.parse(t):{};}catch{fail('Некорректный JSON.',400);}}
 function cleanTrip(t){if(typeof t.title!=='string'||!t.title.trim())fail('Укажите название рейса.');if(t.title.length>200)fail('Название слишком длинное.');if(!Array.isArray(t.points)||t.points.length>50)fail('Допускается до 50 опор.');if(!['single','local'].includes(t.timeMode))fail('Выберите режим времени.');return t;}
 async function fullVersion(store,id){const v=await store.get('version',id);if(!v)fail('Версия не найдена.',404);return {...v,result:await store.jsonFile(v.resultKey)};}
@@ -24,10 +24,10 @@ export async function api(request,env,ctx={waitUntil:p=>p.catch(()=>{})}){
  try{
   if(!['GET','HEAD','OPTIONS'].includes(method)){const origin=request.headers.get('origin');if(origin&&origin!==url.origin)fail('Запрос с другого сайта отклонён.',403);}
   if(path==='/api/health')return json({ok:true,schemaVersion:1});
-  if(path==='/api/config')return json({mapKey:env.YANDEX_MAP_KEY||null,routingConfigured:!!env.YANDEX_ROUTER_KEY,licenseConfirmed:(await store.settings()).licenseConfirmed,defaultProfile,algorithmVersion:'1.0.0',storage:env.LOCAL?'SQLite · этот компьютер':'D1 + R2 · личное облако'});
+  if(path==='/api/config')return json({mapKey:env.YANDEX_MAP_KEY||null,routingConfigured:!!env.YANDEX_ROUTER_KEY,routingMode:'driving',licenseConfirmed:(await store.settings()).licenseConfirmed,defaultProfile,algorithmVersion:'1.0.0',storage:env.LOCAL?'SQLite · этот компьютер':'D1 + R2 · личное облако'});
   if(path==='/api/settings'){if(method==='GET')return json(await store.settings());const b=await body(request),old=await store.settings();if(b.backupIntervalHours!==undefined&&(!Number.isFinite(+b.backupIntervalHours)||+b.backupIntervalHours<0))fail('Некорректный интервал копирования.');return json(await store.put('meta',{...old,licenseConfirmed:b.licenseConfirmed===undefined?old.licenseConfirmed:b.licenseConfirmed===true,backupIntervalHours:b.backupIntervalHours===undefined?old.backupIntervalHours:Math.min(720,+b.backupIntervalHours||0),backupRetention:b.backupRetention===undefined?old.backupRetention:Math.max(1,Math.min(30,+b.backupRetention||7)),exportProfile:b.exportProfile||old.exportProfile}));}
   if(path==='/api/profiles'){if(method==='GET'){const items=await store.list('profile');return json({items:items.length?items:[{id:'default',name:'Стартовый · модельные допущения',...defaultProfile}]});}const b=await body(request);const items=Array.isArray(b.items)?b.items:[b];for(const p of items){if(!p.id)p.id=uid();await store.put('profile',p);}return json({items:await store.list('profile')});}
-  if(path==='/api/integration/check'&&method==='POST'){let routing;try{await yandexRoute({points:[{lat:55.744,lon:37.612},{lat:55.751,lon:37.622}],profile:defaultProfile},env);routing={ok:true,message:'Грузовая маршрутизация доступна; права на хранение проверяются отдельно.'};}catch(e){routing={ok:false,message:safeMessage(e)};}return json({routing,map:{ok:!!env.YANDEX_MAP_KEY,message:env.YANDEX_MAP_KEY?'Браузерный ключ настроен; проверьте карту.':'Отдельный браузерный ключ Яндекс Карт не настроен.'}});}
+  if(path==='/api/integration/check'&&method==='POST'){let routing;try{await yandexRoute({points:[{lat:55.744,lon:37.612},{lat:55.751,lon:37.622}],profile:defaultProfile},env);routing={ok:true,message:'Стандартная автомобильная маршрутизация (driving) доступна; права на хранение проверяются отдельно.'};}catch(e){routing={ok:false,message:safeMessage(e)};}return json({routing,map:{ok:!!env.YANDEX_MAP_KEY,message:env.YANDEX_MAP_KEY?'Браузерный ключ настроен; проверьте карту.':'Отдельный браузерный ключ Яндекс Карт не настроен.'}});}
   if(path==='/api/import'&&method==='POST')return json(await parseImport(await body(request)));
   if(path==='/api/demo'&&method==='POST'){const t={...clone(demoTrip),id:uid(),revision:1,createdAt:now(),updatedAt:now(),archived:false,demo:true};t.route={...t.route,inputSignature:signature(t)};await store.put('trip',t);await store.audit('create-demo',t.id);return json(t,201);}
   if(path==='/api/trips'){
@@ -62,6 +62,8 @@ export async function api(request,env,ctx={waitUntil:p=>p.catch(()=>{})}){
   return json({error:'Адрес не найден.'},404);
  }catch(e){return json({error:safeMessage(e),code:e.code,checks:e.checks},e.status||422);}
 }
+
+
 
 
 

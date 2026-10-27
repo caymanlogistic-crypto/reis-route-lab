@@ -182,9 +182,10 @@ export function reconstruct(trip,route) {
     'Модель плавно снижает скорость до нуля на временных опорах; проезд опоры не обнуляет накопленное движение.'
   ];
   const result={status:'conflict',track:[],stops:[],checks,assumptions,summary:{},algorithmVersion};
+  assumptions.push(...(route?.notes||[]));
   if(checks.some(c=>c.severity==='error'))return result;
   const pts=trip.points,times=pts.map(p=>resolveTime(p,trip));
-  if(!route||!Array.isArray(route.legs)||route.legs.length!==pts.length-1) { checks.push(check('error','ROUTE_MISSING','Постройте грузовой маршрут для всех участков. Прямые линии не используются.'));return result; }
+  if(!route||!Array.isArray(route.legs)||route.legs.length!==pts.length-1) { checks.push(check('error','ROUTE_MISSING','Постройте автомобильный маршрут для всех участков. Прямые линии не используются.'));return result; }
   if(route.source==='demo') {
     if(!pts.every((p,i)=>demoTrip.points[i]&&+p.lat===demoTrip.points[i].lat&&+p.lon===demoTrip.points[i].lon)||pts.length!==demoTrip.points.length) {checks.push(check('error','DEMO_POINTS','Демонстрационная геометрия применима только к исходным демонстрационным координатам.'));return result;}
     checks.push(check('warning','DEMO','Собственная синтетическая геометрия: не реальный дорожный маршрут.'));assumptions.push('Демонстрационная геометрия создана для проверки алгоритма и не подтверждает существование дорог.');
@@ -289,3 +290,4 @@ const demoPoints=[
 ].map(p=>({...p,timezone:'Europe/Moscow',source:'user',radiusM:100,coordinateAccuracyM:100,timeAccuracy:'exact',fixedCoordinates:true,fixedTime:true,comment:'Собственные демонстрационные данные; не реальный рейс.'}));
 const demoLegs=demoPoints.slice(1).map((q,i)=>{const p=demoPoints[i],points=[[p.lat,p.lon],[p.lat,p.lon+(q.lon-p.lon)*0.25],[p.lat+(q.lat-p.lat)*0.5,p.lon+(q.lon-p.lon)*0.25],[p.lat+(q.lat-p.lat)*0.5,q.lon],[q.lat,q.lon]];return {points,distanceM:points.slice(1).reduce((s,v,j)=>s+haversine(points[j],v),0),durationS:1800};});
 export const demoTrip={title:'Демонстрация · пять контрольных точек',client:'Учебный пример',vehicle:'ДЕМО · фура',timeMode:'single',timezone:'Europe/Moscow',points:demoPoints,profile:{...defaultProfile},stopOverrides:[],notes:'Синтетическая геометрия. Только демонстрация расчёта, не дорожный маршрут.',route:{source:'demo',legs:demoLegs,disclaimer:'Собственная синтетическая геометрия; не подтверждает существование дорог.'}};
+
